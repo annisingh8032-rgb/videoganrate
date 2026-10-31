@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ominibase Ad Studio</title>
+<style>
+:root{--bg:#f6f4ef;--ink:#1b2340;--mut:#5d6580;--line:#d9d5c8;--card:#fff;--acc:#e8890c;--ok:#1d7a4d;--bad:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#12162a;--ink:#eceefa;--mut:#9aa1c0;--line:#2a3050;--card:#1a2038;--acc:#f5a53a;--ok:#4cc38a;--bad:#ff8a80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:26px;margin:8px 0 2px}
+h2{font-size:17px;margin:0 0 8px}
+p.sub{margin:0 0 18px;color:var(--mut)}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--mut);margin:8px 0 3px}
+input,textarea,select{width:100%;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+textarea{min-height:90px;resize:vertical}
+button{background:var(--acc);color:#1b1300;border:0;border-radius:6px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}
+button.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:disabled{opacity:.5;cursor:wait}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.row>*{flex:1 1 140px}
+.note{font-size:13px;color:var(--mut)}
+.warn{border-left:4px solid var(--acc);padding:8px 10px;background:var(--bg);font-size:13px;margin-bottom:10px}
+.st{font-size:13px;margin-top:8px;min-height:18px}
+.st.ok{color:var(--ok)}.st.bad{color:var(--bad)}
+video{width:100%;max-width:280px;aspect-ratio:9/16;background:#000;border-radius:8px;margin-top:8px;display:block}
+.tot{font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>Ominibase Ad Studio</h1>
+<p class="sub">Brief se 30-35 sec ka 9:16 Reel, Grok Imagine API se, shot by shot.</p>
+
+<section>
+<h2>1. API key</h2>
+<div class="warn">Key is page me sirf is browser tab me rehti hai. Isko code ya GitHub me kabhi paste mat karna.</div>
+<label for="key">xAI API key</label>
+<input id="key" type="password" autocomplete="off" placeholder="xai-...">
+<div class="row">
+<div><label for="model">Model</label>
+<select id="model">
+<option value="grok-imagine-video">grok-imagine-video (480p/720p)</option>
+<option value="grok-imagine-video-1.5">grok-imagine-video-1.5</option>
+<option value="grok-imagine-video-1.5-lite">grok-imagine-video-1.5-lite (sasta)</option>
+</select></div>
+<div><label for="res">Resolution</label>
+<select id="res"><option>720p</option><option>480p</option></select></div>
+</div>
+</section>
+
+<section>
+<h2>2. Reference images (creator + studio)</h2>
+<label for="refs">Image URLs, ek line me ek. Pehli = creator (&lt;IMAGE_1&gt;), doosri = studio (&lt;IMAGE_2&gt;)</label>
+<textarea id="refs" placeholder="https://USERNAME.github.io/REPO/assets/creator.jpg&#10;https://USERNAME.github.io/REPO/assets/studio.jpg"></textarea>
+<p class="note">Images public URL par honi chahiye. Khali chhodo to text-to-video chalega, par chehra consistent nahi rahega.</p>
+<label for="cons">Consistency block (har shot ke prompt ke shuru me jud jata hai)</label>
+<textarea id="cons">Ultra-realistic vertical 9:16 premium Indian SaaS commercial, shot on a cinema camera. The same Indian male content creator from <IMAGE_1>, same face, hairstyle, age, skin tone, body and outfit in every shot, natural expressions, realistic hand gestures, accurate Hindi lip-sync. The same dance studio from <IMAGE_2>, same mirrors, flooring, lighting and interior in every shot.</textarea>
+</section>
+
+<section>
+<h2>3. Shots</h2>
+<p class="note">Ek shot max 15 sec. Neeche 3 shot = 32 sec. Total: <span id="tot" class="tot"></span> sec</p>
+<div id="shots"></div>
+<div class="row" style="margin-top:12px">
+<button id="all">Saare shots generate karo</button>
+</div>
+<p class="note">Generated links temporary hote hain. Har clip turant download kar lo, fir CapCut ya FFmpeg me jodo.</p>
+</section>
+</main>
+
+<script>
+const DEFAULTS=[
+{d:12,t:'Medium shot. The creator stands in the studio and says to camera in Hindi: "डांस स्टूडियो चलाते हो? फीस और अटेंडेंस आज भी रजिस्टर में लिखते हो?" He shrugs with a tired smile. Slow push-in.'},
+{d:10,t:'Over-the-shoulder shot of the creator at a laptop showing the Ominibase dashboard with student list, fees and attendance. He says in Hindi: "Ominibase में सब कुछ एक जगह: स्टूडेंट्स, फीस, अटेंडेंस।" Soft camera move.'},
+{d:10,t:'Close-up, the creator smiles confidently at camera and says in Hindi: "आज ही Ominibase ट्राई करो।" Dancers practising blurred in the mirror behind him. Slow zoom in.'}
+];
+const $=s=>document.querySelector(s);
+const shotsEl=$('#shots');
+const API='https://api.x.ai/v1';
+
+DEFAULTS.forEach((s,i)=>{
+ const el=document.createElement('div');
+ el.style.cssText='border-top:1px solid var(--line);padding-top:10px;margin-top:10px';
+ el.innerHTML=`<h2>Shot ${i+1}</h2>
+ <label>Prompt</label><textarea class="p">${s.t}</textarea>
+ <div class="row"><div><label>Duration (1-15 sec)</label><input class="d" type="number" min="1" max="15" value="${s.d}"></div>
+ <div><button class="g">Generate</button></div></div>
+ <div class="st"></div><div class="out"></div>`;
+ shotsEl.appendChild(el);
+ el.querySelector('.g').onclick=()=>gen(el);
+ el.querySelector('.d').oninput=total;
+});
+function total(){$('#tot').textContent=[...document.querySelectorAll('.d')].reduce((a,x)=>a+(+x.value||0),0)}
+total();
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function say(el,msg,cls){const s=el.querySelector('.st');s.textContent=msg;s.className='st '+(cls||'')}
+
+async function gen(el){
+ const key=$('#key').value.trim();
+ if(!key){say(el,'Pehle API key daalo.','bad');return}
+ const btn=el.querySelector('.g');btn.disabled=true;
+ el.querySelector('.out').innerHTML='';
+ const refs=$('#refs').value.split('\n').map(x=>x.trim()).filter(Boolean);
+ const body={
+  model:$('#model').value,
+  prompt:$('#cons').value.trim()+'\n\n'+el.querySelector('.p').value.trim(),
+  duration:Math.min(15,Math.max(1,+el.querySelector('.d').value||8)),
+  aspect_ratio:'9:16',
+  resolution:$('#res').value
+ };
+ if(refs.length)body.reference_images=refs.map(url=>({url}));
+ const H={'Content-Type':'application/json','Authorization':'Bearer '+key};
+ try{
+  say(el,'Request bhej raha hoon...');
+  const r=await fetch(API+'/videos/generations',{method:'POST',headers:H,body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok||!j.request_id)throw new Error(j.error?.message||j.error||j.message||('HTTP '+r.status));
+  const t0=Date.now();
+  while(true){
+   await sleep(5000);
+   say(el,'Ban rahi hai... '+Math.round((Date.now()-t0)/1000)+' sec');
+   const p=await fetch(API+'/videos/'+j.request_id,{headers:{Authorization:H.Authorization}});
+   const d=await p.json();
+   if(d.status==='done'){
+    const url=d.video.url;
+    el.querySelector('.out').innerHTML=`<video src="${url}" controls playsinline></video><p><a href="${url}" target="_blank" rel="noopener" download>Clip download / open</a></p>`;
+    say(el,'Ho gaya.','ok');break;
+   }
+   if(d.status==='expired')throw new Error('Request expire ho gayi. Dobara generate karo.');
+   if(d.status==='failed')throw new Error(d.error?.message||'Generation fail hui (content policy ya server issue).');
+  }
+ }catch(e){
+  const m=String(e.message||e);
+  say(el,m.includes('Failed to fetch')?'Browser ne request block ki (CORS ya network). Neeche proxy wala tarika dekho.':'Error: '+m,'bad');
+ }
+ btn.disabled=false;
+}
+
+$('#all').onclick=async()=>{
+ for(const el of document.querySelectorAll('#shots>div')){await gen(el)}
+};
+</script>
+</body>
+</html>
